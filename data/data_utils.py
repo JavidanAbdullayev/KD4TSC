@@ -21,7 +21,7 @@ class TSDataset(Dataset):
         
         # Handle labels
         if len(y.shape) > 1: # ONe-hot encoded
-            self.y = torch.floatTensor(y)
+            self.y = torch.FloatTensor(y)
         else:
             self.y = torch.LongTensor(y)
 
@@ -40,107 +40,74 @@ class TSDataset(Dataset):
         return x, y
         
 
-def znormalize(x, axis=1, epsilon=1e-8):
-    """Z-normalize time series data."""
-    mean = x.mean(axis=axis, keepdims=True)
-    std = x.std(axis=axis, keepdims=True)
-    std[std==0] = 1.0 # Avoid division by zero
-
-    return (x - mean) / std
-
 
 def load_ucr_dataset(root_dir, dataset_name):
-    """
-    Load a single UCR dataset.
-
-    Args:
-        root_dir: Root directory containing UCR datasets
-        dataset_name: Name of the dataset
-
-    Returns:
-        Tuple of (x_train, y_train, x_test, y_test)
-    """
     dataset_path = os.path.join(root_dir, dataset_name)
+    print(f"dataset_path: {dataset_path}")
+    # folder_path = "/home/jabdullayev/Codes/UCRArchive_2018/"
+    # folder_path = "/home/jabdullayev/phd/datasets/UCRArchive_2018/"
+    # folder_path += file_name + "/"
 
-    # Load train and test files
-    train_file = os.path.join(dataset_path, f'{dataset_name}_TRAIN.tsv')
-    test_file = os.path.join(dataset_path, f'{dataset_name}_TEST.tsv')
+    train_path = os.path.join(dataset_path, f'{dataset_name}_TRAIN.tsv')
+    test_path = os.path.join(dataset_path, f'{dataset_name}_TEST.tsv')
 
-    df_train = pd.read_csv(train_file, sep='\t', header=None)
-    df_test = pd.read_csv(test_file, sep='\t', header=None)
+    print(f'train_path: {train_path}')
+    print(f'test_path: {test_path}')
+    
+    if os.path.exists(test_path) <= 0:
+        print("File not found")
+        return None, None, None, None
 
-    # Extract labels (first column)
-    y_train = df_train.iloc[:, 0].values
-    y_test = df_test.iloc[:, 0].values
+    train = np.loadtxt(train_path, dtype=np.float64)
+    test = np.loadtxt(test_path, dtype=np.float64)
 
-    # Extract features (remaining columns)
-    x_train = df_train.iloc[:, 1:].values
-    x_test = df_test.iloc[:, 1:]
+    ytrain = train[:, 0]
+    ytest = test[:, 0]
 
-    # Z-normalization
-    x_train = znormalize(x_train, axis=1)
-    x_test = znormalize(x_test, axis=1)
+    xtrain = np.delete(train, 0, axis=1)
+    xtest = np.delete(test, 0, axis=1)
 
-    return x_train, y_train, x_test, y_test
+    nb_classes = len(np.unique(ytrain))
+
+    return xtrain, ytrain, xtest, ytest, nb_classes
 
 
-def prepare_data(x_train, y_train, x_test, y_test, one_hot=True):
-    """
-    Prepare data for training.
+def znormalize(x):
 
-    Args:
-        x_train, y_train, x_test, y_test: Raw data
-        one_hot: Whether to one-hot encode labels
+    stds = np.std(x, axis=1, keepdims=True)
+    if len(stds[stds == 0.0]) > 0:
+        stds[stds == 0.0] = 1.0
+        return (x - x.mean(axis=1, keepdims=True)) / stds
+    return (x - x.mean(axis=1, keepdims=True)) / (x.std(axis=1, keepdims=True))
 
-    Returns:
-        Prepared data with proper shapes and encoding
-    """
 
-    # Ensure correct shape for univariate data
-    if len(x_train.shape) == 2:
-        x_train = x_train[:, :, np.newaxis]
-        x_test = x_test[:, :, np.newaxis]
+def encode_labels(y):
 
-    # Encode labels
-    label_encoder = LabelEncoder()
-    y_train_encoded = label_encoder.fit_transform(y_train)
-    y_test_encoded = label_encoder.fit_transform(y_test)
+    labenc = LabelEncoder()
 
-    nb_classes = len(np.unique(y_train_encoded))
+    return labenc.fit_transform(y)
 
-    # One-hot encode if requested
-    if one_hot:
-        y_train_onehot = np.zeros((len(y_train_encoded), nb_classes))
-        y_train_onehot[np.arange(len(y_train_encoded)), y_train_encoded] = 1
-
-        y_test_onehot = np.zeros((len(y_test_encoded), nb_classes))
-        y_test_onehot[np.arange(len(y_test_encoded)), y_test_encoded] = 1
-
-        y_train_encoded = y_train_onehot
-        y_test_encoded = y_test_onehot
-
-    return x_train, y_train_encoded, x_test, y_test_encoded, nb_classes
 
 
 def create_data_loaders(x_train, y_train, x_test, y_test, batch_size=64,
-                        num_workers=0, pin_memory=True):
-    
-    """
-    Create PyTorch DataLoaders.
+                        num_workers=0, pin_memory=True,):
 
-    Args:
-        x_train, y_train, x_test, y_test: Prepared data
-        batch_size: Batch size for training
-        num_workers: Number of workers for data loading
-        pin_memory: Whether to use pinned memory
+    x_train = znormalize(x_train)
+    x_train = np.expand_dims(x_train, axis=1)
 
-    Returns:
-        train_loader, test_loader
-    """
+    x_test = znormalize(x_test)
+    x_test = np.expand_dims(x_test, axis=1)
+
+
+    y_train = encode_labels(y_train)
+    y_test = encode_labels(y_test)
 
     train_dataset = TSDataset(x_train, y_train)
     test_dataset = TSDataset(x_test, y_test)
 
+    # data, target = torch.from_numpy(data), torch.from_numpy(target)
+
+    torch.manual_seed(42)    
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -157,6 +124,5 @@ def create_data_loaders(x_train, y_train, x_test, y_test, batch_size=64,
         pin_memory=pin_memory
     )
 
-    return train_loader, test_loader
 
-
+    return train_loader,test_loader

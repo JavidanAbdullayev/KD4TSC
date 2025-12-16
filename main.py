@@ -5,8 +5,8 @@ import argparse
 import torch
 
 from config import *
-from data_utils import load_ucr_dataset, prepare_data, create_data_loaders
-from trainer import Trainer
+from data.data_utils import load_ucr_dataset, create_data_loaders
+from trainers.trainer import Trainer
 from utils import (
     save_logs, get_best_teacher, create_directory, 
     check_done, mark_done, print_model_summary
@@ -60,12 +60,7 @@ def run_experiment(dataset_name, classifier_name, iteration, archive_name,
     
     # Load dataset
     print(f"Loading dataset {dataset_name}...")
-    x_train, y_train, x_test, y_test = load_ucr_dataset(PATH_DATA, dataset_name)
-    
-    # Prepare data
-    x_train, y_train, x_test, y_test, nb_classes = prepare_data(
-        x_train, y_train, x_test, y_test, one_hot=True
-    )
+    x_train, y_train, x_test, y_test, nb_classes = load_ucr_dataset(PATH_DATA, dataset_name)
     
     print(f"Data shapes:")
     print(f"  Train: {x_train.shape}, Classes: {nb_classes}")
@@ -108,8 +103,8 @@ def run_experiment(dataset_name, classifier_name, iteration, archive_name,
         lr_factor=LR_FACTOR,
         device=DEVICE,
         teacher_path=teacher_path,
-        alpha=alpha if alpha is not None else 0.3,
-        temperature=temperature if temperature is not None else 10.0,
+        alpha=alpha,
+        temperature=temperature,
         teacher_depth=TEACHER_DEPTH,
         student_depth=STUDENT_DEPTH,
         nb_filters=NB_FILTERS
@@ -173,31 +168,35 @@ def main():
                 else:
                     num_iters = ITERATIONS.get(classifier_name, 5)
                 
-                for iteration in range(1, num_iters + 1):
-                    if classifier_name == 'student_kd':
-                        # Run with different alpha and temperature values
-                        for alpha in ALPHA_LIST:
-                            for temperature in TEMPERATURE_LIST:
-                                try:
-                                    run_experiment(
-                                        dataset_name, classifier_name, iteration,
-                                        archive_name, alpha, temperature
-                                    )
-                                except Exception as e:
-                                    print(f"\nError in experiment: {e}")
-                                    import traceback
-                                    traceback.print_exc()
+                if classifier_name == 'student_kd':
+                    # Run with different alpha and temperature values
+                    for alpha in ALPHA_LIST:
+                        for temperature in TEMPERATURE_LIST:
+                            for iteration in range(1, num_iters + 1):
+                                if alpha != None and temperature != None:
+                                    try:
+                                        run_experiment(
+                                            dataset_name, classifier_name, iteration,
+                                            archive_name, alpha, temperature
+                                        )
+                                    except Exception as e:
+                                        print(f"\nError in experiment: {e}")
+                                        import traceback
+                                        traceback.print_exc()
+                                
                     else:
-                        # Run standard experiment
-                        try:
-                            run_experiment(
-                                dataset_name, classifier_name, iteration,
-                                archive_name
-                            )
-                        except Exception as e:
-                            print(f"\nError in experiment: {e}")
-                            import traceback
-                            traceback.print_exc()
+                        for iteration in range(1, num_iters + 1):
+                            # Run standard experiment
+                            try:
+                                run_experiment(
+                                    dataset_name, classifier_name, iteration,
+                                    archive_name
+                                )
+                                
+                            except Exception as e:
+                                print(f"\nError in experiment: {e}")
+                                import traceback
+                                traceback.print_exc()
     
     print("\n" + "="*80)
     print("All experiments completed!")

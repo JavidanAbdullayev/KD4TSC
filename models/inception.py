@@ -47,13 +47,14 @@ class Inception_block(nn.Module):
   def forward(self, x):
     if self.use_bottleneck and int(x.shape[-2]) > 1:
         y = self.bottleneck(x)
+
     else:
         y = x        
+
 
     x = torch.cat([self.branch1(y), self.branch2(y), self.branch3(y), self.branch4(x)], 1)
     x = self.bn(x)
     x = self.relu(x)
-
     return x
 
 class Inception(nn.Module):
@@ -88,7 +89,7 @@ class Inception(nn.Module):
                 y = self.shortcut[d//3](input_res)
                 x = self.relu(x + y)
                 input_res = x
-
+        
         x = self.avgpool1(x)
         x = x.reshape(x.shape[0], -1)
         x = self.fc1(x)

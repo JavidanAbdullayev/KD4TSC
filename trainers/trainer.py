@@ -57,15 +57,15 @@ class Trainer:
             self.model = Inception(
                 input_shape=input_shape,
                 nb_classes=nb_classes,
-                depth=teacher_depth,
-                nb_filters=nb_filters,
+                # depth=teacher_depth,
+                # nb_filters=nb_filters,
             )
             self.model = self.model.to(device)
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
-            self.cirterion = nn.CrossEntropyLoss()
+            self.criterion = nn.CrossEntropyLoss()
             self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min',
                                                factor=lr_factor, patience=patience,
-                                               min_lr=min_lr, verbose=True)
+                                               min_lr=min_lr)
             self.is_distiller = False
 
 
@@ -94,7 +94,7 @@ class Trainer:
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
             self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min',
                                               factor=lr_factor, patience=patience,
-                                              min_lr=min_lr, verbose=True)
+                                              min_lr=min_lr)
             self.is_distiller = True
 
 
@@ -141,7 +141,7 @@ class Trainer:
                 metrics = self.distiller.train_step((inputs, labels), self.optimizer)
                 
                 # Accumulate losses
-                batch_size = metrics['num_samples']
+                batch_size = inputs.size(0)
                 total_loss += metrics['total_loss'] * batch_size
                 total_student_loss += metrics['student_loss'] * batch_size
                 total_distillation_loss += metrics['distillation_loss'] * batch_size
@@ -158,7 +158,7 @@ class Trainer:
                 # Standard training
                 self.optimizer.zero_grad()
                 outputs = self.model(inputs)
-
+                
                 loss = self.criterion(outputs, labels_idx)
                 loss.backward()
                 self.optimizer.step()
